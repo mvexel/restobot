@@ -2,22 +2,16 @@
 
 Code for a Mastodon bot that draws attention to stale POIs.
 
-## Database
+## Database prep and data loading
 
-This is the table schema:
+Create a database `osm` with PostGIS extension.
 
-```
-CREATE TABLE public.restodon (
-    osm_type character(1),
-    osm_id bigint,
-    name text,
-    class text,
-    subclass text,
-    geom public.geometry(Point,4326),
-    version smallint,
-    age real,
-    place text,
-    state text,
-    posted date
-);
-```
+Download an OSM PBF file.
+
+Optionally, filter it with `osmium` to reduce `osm2pgsql` processing time.
+
+`osmium tags-filter -o us-poi.osm.pbf us-latest.osm.pbf nw/amenity,shop,tourism,craft,emergency,historic,leisure,office,sport,public_transport`
+
+Load data:
+
+`osm2pgsql -d osm -x -O flex -S poi.lua -c us-poi.osm.pbf`
