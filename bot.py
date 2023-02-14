@@ -1,7 +1,7 @@
 #!/usr/local/bin python3
 
 import psycopg2
-import secrets
+import private
 import mastodon
 
 
@@ -20,16 +20,16 @@ def compose_link(osm_type, osm_id):
         return f"https://osm.org/way/{osm_id}"
 
 
-dsn = f"postgresql://{secrets.pg_user}:{secrets.pg_pass}@{secrets.pg_host}:{secrets.pg_port}"
+dsn = f"postgresql://{private.pg_user}:{private.pg_pass}@{private.pg_host}:{private.pg_port}"
 conn = psycopg2.connect(
-    f"dbname={secrets.pg_db} host = {secrets.pg_host} port={secrets.pg_port} user={secrets.pg_user} password={secrets.pg_pass}"
+    f"dbname={private.pg_db} host = {private.pg_host} port={private.pg_port} user={private.pg_user} password={private.pg_pass}"
 )
 cur = conn.cursor()
 
-# mastodon = mastodon.Mastodon(access_token=secrets.masto_access_token)
+# mastodon = mastodon.Mastodon(access_token=private.masto_access_token)
 
 cur.execute(
-    f"SELECT osm_id, name, st_astext(geom), age, state, place, osm_type FROM {secrets.pg_table} WHERE posted IS NULL ORDER BY RANDOM() LIMIT 1;",
+    f"SELECT osm_id, name, st_astext(geom), age, state, place, osm_type FROM {private.pg_table} WHERE posted IS NULL ORDER BY RANDOM() LIMIT 1;",
 )
 result = cur.fetchone()
 message = f"""
@@ -44,7 +44,7 @@ print(message)
 # mastodon.toot(message)
 
 cur.execute(
-    f"UPDATE {secrets.pg_table} SET posted = current_timestamp WHERE osm_id = {result[0]}"
+    f"UPDATE {private.pg_table} SET posted = current_timestamp WHERE osm_id = {result[0]}"
 )
 conn.commit()
 conn.close()
