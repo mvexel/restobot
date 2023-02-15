@@ -2,7 +2,7 @@
 
 import psycopg2
 import private
-import mastodon
+from mastodon import Mastodon
 
 
 def compose_place(state, place):
@@ -26,7 +26,9 @@ conn = psycopg2.connect(
 )
 cur = conn.cursor()
 
-# mastodon = mastodon.Mastodon(access_token=private.masto_access_token)
+client = Mastodon(
+    api_base_url="https://botsin.space", access_token=private.masto_access_token
+)
 
 cur.execute(
     f"SELECT osm_id, name, st_astext(geom), age, state, place, osm_type FROM {private.pg_table} WHERE posted IS NULL ORDER BY RANDOM() LIMIT 1;",
@@ -41,7 +43,7 @@ If you could do some research and check if this restaurant still exists, that wo
 """
 
 print(message)
-# mastodon.toot(message)
+client.toot(message)
 
 cur.execute(
     f"UPDATE {private.pg_table} SET posted = current_timestamp WHERE osm_id = {result[0]}"
