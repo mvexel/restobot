@@ -20,10 +20,8 @@ def compose_link(osm_type, osm_id):
         return f"https://osm.org/way/{osm_id}"
 
 
-dsn = f"postgresql://{private.pg_user}:{private.pg_pass}@{private.pg_host}:{private.pg_port}"
-conn = psycopg2.connect(
-    f"dbname={private.pg_db} host = {private.pg_host} port={private.pg_port} user={private.pg_user} password={private.pg_pass}"
-)
+dsn = f"postgresql://{private.pg_user}:{private.pg_pass}@{private.pg_host}:{private.pg_port}/{private.pg_db}"
+conn = psycopg2.connect(dsn)
 cur = conn.cursor()
 
 client = Mastodon(
