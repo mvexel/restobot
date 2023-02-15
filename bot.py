@@ -50,14 +50,14 @@ result = cur.fetchone()
 
 # Compose the message
 msg = compose_message(
-    days=result[3],
+    days=int(result[3]),
     name=result[2],
     place=compose_place(state=result[4], place=result[5]),
     osm_link=compose_link(osm_type=result[0], osm_id=result[1]),
 )
 
 print(msg)
-# client.toot(msg)
+client.toot(msg)
 
 cur.execute(
     f"UPDATE {private.pg_table} SET posted = current_timestamp WHERE osm_id = {result[1]}"
