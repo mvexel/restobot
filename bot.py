@@ -44,23 +44,23 @@ client = Mastodon(
 
 # Get a random record
 cur.execute(
-    f"SELECT osm_id, name, st_astext(geom), age, state, place, osm_type FROM {private.pg_table} WHERE posted IS NULL ORDER BY RANDOM() LIMIT 1;",
+    f"SELECT osm_type, osm_id, name, age, state, place FROM {private.pg_table} WHERE posted IS NULL ORDER BY RANDOM() LIMIT 1;",
 )
 result = cur.fetchone()
 
 # Compose the message
 msg = compose_message(
-    result[2],
-    result[1],
-    compose_place(result[4], result[5]),
-    compose_link(result[6], result[0]),
+    days=result[3],
+    name=result[2],
+    place=compose_place(state=result[4], place=result[5]),
+    osm_link=compose_link(osm_type=result[0], osm_id=result[1]),
 )
 
 print(msg)
 # client.toot(msg)
 
 cur.execute(
-    f"UPDATE {private.pg_table} SET posted = current_timestamp WHERE osm_id = {result[0]}"
+    f"UPDATE {private.pg_table} SET posted = current_timestamp WHERE osm_id = {result[1]}"
 )
 conn.commit()
 conn.close()
