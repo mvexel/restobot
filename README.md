@@ -48,5 +48,5 @@ Finally add a `posted` column so we can keep track of what's posted:
 Crontab the replication
 
 ```cron=
-0 10 \* \* \* cd /home/mvexel/restobot/ && venv/bin/python3 bot.py >> /home/mvexel/restobot.log
+0 10 * * * cd /home/mvexel/restobot/ && venv/bin/python3 bot.py >> /home/mvexel/restobot.log
 ```
