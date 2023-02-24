@@ -44,7 +44,7 @@ client = Mastodon(
 
 # Get a random record
 cur.execute(
-    f"SELECT osm_type, osm_id, name, age, state, place FROM {private.pg_table} WHERE posted IS NULL ORDER BY RANDOM() LIMIT 1;",
+    f"SELECT osm_type, osm_id, name, current_date - timestamp::date, state, place FROM {private.pg_table} WHERE posted IS NULL AND timestamp < current_date - (365 * 5) ORDER BY RANDOM() LIMIT 1;",
 )
 result = cur.fetchone()
 
