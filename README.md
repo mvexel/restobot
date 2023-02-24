@@ -6,16 +6,47 @@ Code for a Mastodon bot that draws attention to stale POIs.
 
 Create a database `osm` with PostGIS extension.
 
-Download an OSM PBF file.
+```bash!
+$ createuser -d osm
+$ createdb -O osm osm
+$ psql -d osm -c 'create extension postgis'
+```
 
-Optionally, filter it with `osmium` to reduce `osm2pgsql` processing time.
+Load the initial data and init / perform replication.
+(You will want to add a cron job for the `osm2pgsql-replication update` command)
 
-`osmium tags-filter -o us-poi.osm.pbf us-latest.osm.pbf nw/amenity,shop,tourism,craft,emergency,historic,leisure,office,sport,public_transport`
+```bash!
+$ osm2pgsql --slim -d utah -x -O flex -S ~/dev/restobot/osm2pgsql/poi.lua -c ~/osm/data/utah-latest.osm.pbf
+$ osm2pgsql-replication init -d utah --osm-file ~/osm/data/utah-latest.osm.pbf
+$ osm2pgsql-replication update -d utah --  -x -O flex -S ~/dev/restobot/osm2pgsql/poi.lua
+```
 
-Load data:
+Next, load TIGER place and state data
 
-`osm2pgsql -d osm -x -O flex -S poi.lua -c us-poi.osm.pbf`
+```bash!
+$ shp2pgsql -c -I -D -s 4326 ~/geodata/tiger/states/2022/tl_2022_us_state/tl_2022_us_state.shp tiger_states | psql -d utah
+$ shp2pgsql -c -I -D -s 4326 ~/geodata/tiger/places/2022/tl_2022_01_place/tl_2022_01_place.shp tiger_places | psql -d utah
+psql -d utah -c 'delete from tiger_places;'
+$ find ~/geodata/tiger/places/2022/ -name \*.shp -exec sh -c "shp2pgsql -a -D -s 4326 {} tiger_places | psql -d utah" \;
+```
 
-Crontab example
+Next, add place and state columns and perform the spatial joins.
 
+```psql!
+# alter table pois add column place text;
+# update pois set place = tp.name from tiger_places tp where pois.geom @ tp.geom;
+# alter table pois add column state text;
+# update pois set state = ts.name from tiger_states ts where pois.geom @ ts.geom;
+```
+
+Finally add a `posted` column so we can keep track of what's posted:
+
+```psql!
+# alter table pois add column posted timestamp;
+```
+
+Crontab the replication
+
+```cron!
 0 10 \* \* \* cd /home/mvexel/restobot/ && venv/bin/python3 bot.py >> /home/mvexel/restobot.log
+```
