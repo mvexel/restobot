@@ -4,66 +4,50 @@ local pois = osm2pgsql.define_table({
     columns = {
         { column = 'name' },
         { column = 'class', not_null = true },
-        { column = 'subclass' },
+        { column = 'subclass', not_null = true },
         { column = 'geom', type = 'point', not_null = true, projection = 4326 },
-        { column = 'version', type = 'smallint' },
-        { column = 'age', type = 'real'},
+        { column = 'version', type = 'smallint', not_null = true },
+        { column = 'timestamp', sql_type = 'timestamp', not_null = true},
 }})
 
-function age(ts)
-    return os.difftime(os.time(), ts) / ( 60 * 60 * 24 )
+function format_date(ts)
+    --- borrowed from https://github.com/openstreetmap/osm2pgsql/blob/ad541d2a536a63de162d6266a6670aa2172b2749/flex-config/attributes.lua#L52
+    return os.date('!%Y-%m-%dT%H:%M:%SZ', ts)
 end
 
-function process_poi(object, geom)
-
-    function age(ts)
-        return os.difftime(os.time(), ts) / ( 60 * 60 * 24 )
-    end
-
-    local a = {
+function process_poi(object)
+    local fields = {
         name = object.tags.name,
         version = object.version,
-        age = age(object.timestamp),
-        geom = geom
+        timestamp = format_date(object.timestamp),
     }
 
     if object.tags.amenity then
-        a.class = 'amenity'
-        a.subclass = object.tags.amenity
+        fields.class = 'amenity'
+        fields.subclass = object.tags.amenity
     elseif object.tags.shop then
-        a.class = 'shop'
-        a.subclass = object.tags.shop
-    elseif object.tags.tourism then
-        a.class = 'tourism'
-        a.subclass = object.tags.tourism
-    elseif object.tags.craft then
-        a.class = 'craft'
-        a.subclass = object.tags.craft
-    elseif object.tags.emergency then
-        a.class = 'emergency'
-        a.subclass = object.tags.emergency
-    elseif object.tags.leisure then
-        a.class = 'leisure'
-        a.subclass = object.tags.leisure
-    elseif object.tags.office then
-        a.class = 'office'
-        a.subclass = object.tags.office
-    elseif object.tags.sport then
-        a.class = 'sport'
-        a.subclass = object.tags.sport
+        fields.class = 'shop'
+        fields.subclass = object.tags.shop
     else
-        return
+        return {}
     end
-
-    pois:insert(a)
+    return fields
 end
 
 function osm2pgsql.process_node(object)
-    process_poi(object, object:as_point())
+    record = process_poi(object)
+    if record.class then 
+        record.geom = object:as_point()
+        pois:insert(record)
+    end
 end
 
 function osm2pgsql.process_way(object)
     if object.is_closed and object.tags.building then
-        process_poi(object, object:as_polygon():centroid())
+        record = process_poi(object)
+        if record.class then
+            record.geom = object:as_polygon():centroid()
+            pois:insert(record)
+        end
     end
 end
