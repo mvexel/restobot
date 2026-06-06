@@ -1,0 +1,54 @@
+# Cosmo filter config for Resto-bot.
+#
+# Extracts amenity/shop POIs from an OSM PBF into GeoParquet, replacing the
+# old osm2pgsql/poi.lua + PostgreSQL pipeline. Two tables are used so we can
+# stamp each feature with its OSM element type ('N' for nodes, 'W' for ways);
+# cosmo has no meta:type field, so the type is set with a constant CEL literal.
+#
+# Output is a directory containing nodes.parquet and ways.parquet, both with
+# an identical schema so the bot can read them as a single dataset.
+#
+#   cosmo convert -i region.osm.pbf -f pois.yaml -o ./data --format parquet
+
+tables:
+  nodes:
+    filter: "amenity | shop"
+    geometry:
+      node: true
+      way: false
+      closed_way: false
+      relation: false
+    columns:
+      - name: osm_type
+        source: "expr:'N'"
+      - name: osm_id
+        source: meta:id
+        type: integer
+      - name: name
+        source: tag:name
+      - name: version
+        source: meta:version
+        type: integer
+      - name: timestamp
+        source: meta:timestamp
+
+  ways:
+    filter: "amenity | shop"
+    geometry:
+      node: false
+      way: false
+      closed_way: centroid
+      relation: false
+    columns:
+      - name: osm_type
+        source: "expr:'W'"
+      - name: osm_id
+        source: meta:id
+        type: integer
+      - name: name
+        source: tag:name
+      - name: version
+        source: meta:version
+        type: integer
+      - name: timestamp
+        source: meta:timestamp

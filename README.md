@@ -2,51 +2,57 @@
 
 Code for a Mastodon bot that draws attention to stale POIs.
 
-## Database prep and data loading
+Resto-bot reads its candidates straight from a GeoParquet file produced by
+[cosmo](https://github.com/mvexel/cosmo) — no PostgreSQL/PostGIS required. It
+picks a random POI that hasn't been edited in over five years, toots a link to
+it, and remembers what it posted in a plain text log.
 
-Create a database `osm` with PostGIS extension.
+## Data prep
 
-```bash=
-$ createuser -d osm
-$ createdb -O osm osm
-$ psql -d osm -c 'create extension postgis'
+Build the candidate dataset from an OSM PBF extract with cosmo and the
+[`pois.yaml`](pois.yaml) filter. This extracts every `amenity`/`shop` POI as a
+point (building polygons are reduced to their centroid) into a directory holding
+`nodes.parquet` and `ways.parquet`:
+
+```bash
+cosmo convert \
+  --input ~/osm/data/us-latest.osm.pbf \
+  --filters pois.yaml \
+  --output ./data \
+  --format parquet
 ```
 
-Load the initial data and init / perform replication.
-(You will want to add a cron job for the `osm2pgsql-replication update` command)
+Re-run this whenever you want fresher data (e.g. download a new extract and
+regenerate on a schedule). There is no replication or spatial join step
+anymore; the place/state shown in each toot is fetched on demand from OSM
+Nominatim when the bot runs.
 
-```bash=
-$ osm2pgsql --slim -d osm -x -O flex -S ~/dev/restobot/osm2pgsql/poi.lua -c ~/osm/data/us-latest.osm.pbf
-$ osm2pgsql-replication init -d osm --osm-file ~/osm/data/us-latest.osm.pbf
-$ osm2pgsql-replication update -d osm --  -x -O flex -S ~/dev/restobot/osm2pgsql/poi.lua
+## Setup
+
+```bash
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+cp private_example.py private.py   # then fill in your settings
 ```
 
-Next, load [TIGER place and state data](https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-geodatabase-file.2022.html). Note that we load one places file then delete the rows from the table. This is so we can create the table schema and then use `find` to load all TIGER place files at once and avoid duplicating data. We only have to do this with the places data because it comes in one file per state. There's perhaps a smarter way to do this!
+`private.py` settings:
 
-```bash=
-$ shp2pgsql -c -I -D -s 4326 ~/geodata/tiger/states/2022/tl_2022_us_state/tl_2022_us_state.shp tiger_states | psql -d osm
-$ shp2pgsql -c -I -D -s 4326 ~/geodata/tiger/places/2022/tl_2022_01_place/tl_2022_01_place.shp tiger_places | psql -d osm
-psql -d osm -c 'delete from tiger_places;'
-$ find ~/geodata/tiger/places/2022/ -name \*.shp -exec sh -c "shp2pgsql -a -D -s 4326 {} tiger_places | psql -d osm" \;
+- `data_dir` — the cosmo output directory (contains `nodes.parquet` / `ways.parquet`)
+- `posted_file` — path to the log of already-posted features (created on first run)
+- `nominatim_user_agent` — identifying string with a contact address (required by [Nominatim's usage policy](https://operations.osmfoundation.org/policies/nominatim/))
+- `masto_base_url`, `masto_access_token` — your Mastodon instance and token
+
+## Running
+
+```bash
+venv/bin/python3 bot.py
 ```
 
-Next, add place and state columns and perform the spatial joins.
+Each run selects one stale, not-yet-posted POI, reverse-geocodes its location,
+toots about it, and appends its key (e.g. `N123456`) to `posted_file`.
 
-```psql=
-# alter table pois add column place text;
-# update pois set place = tp.name from tiger_places tp where pois.geom @ tp.geom;
-# alter table pois add column state text;
-# update pois set state = ts.name from tiger_states ts where pois.geom @ ts.geom;
-```
+Crontab it:
 
-Finally add a `posted` column so we can keep track of what's posted:
-
-```psql=
-# alter table pois add column posted timestamp;
-```
-
-Crontab the replication
-
-```cron=
+```cron
 0 10 * * * cd /home/mvexel/restobot/ && venv/bin/python3 bot.py >> /home/mvexel/restobot.log
 ```
