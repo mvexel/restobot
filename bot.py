@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import random
 from datetime import date, timedelta
 
@@ -7,9 +8,26 @@ import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import requests
 from mastodon import Mastodon
-from shapely import wkb
+from shapely import from_wkb
 
-import private
+
+def setting(name, default=None):
+    return os.environ.get(name.upper(), default)
+
+
+DATA_PATH = setting("data_path", setting("data_dir", "./data/pois.parquet"))
+POSTED_FILE = setting("posted_file", "./posted.txt")
+NOMINATIM_USER_AGENT = setting("nominatim_user_agent")
+MASTO_BASE_URL = setting("masto_base_url")
+MASTO_ACCESS_TOKEN = setting("masto_access_token")
+DRY_RUN = setting("dry_run", "").lower() in {"1", "true", "yes"}
+
+
+def require_setting(value, name):
+    if value:
+        return value
+    raise RuntimeError(f"Missing required setting: {name}")
+
 
 # A POI is "stale" once it hasn't been touched in this many days.
 STALE_DAYS = 365 * 5
@@ -38,15 +56,12 @@ def compose_place(state, place):
 
 
 def compose_link(osm_type, osm_id):
-    """Composes a link to an OSM feature from an OSM id and an OSM type (N or W)"""
-    if osm_type == "N":
-        return f"https://osm.org/node/{osm_id}"
-    if osm_type == "W":
-        return f"https://osm.org/way/{osm_id}"
+    """Composes a link to an OSM feature from an OSM id and type."""
+    return f"https://osm.org/{osm_type}/{osm_id}"
 
 
 def load_posted(path):
-    """Reads the set of already-posted feature keys (e.g. 'N123', 'W456')"""
+    """Reads the set of already-posted feature keys."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             return {line.strip() for line in f if line.strip()}
@@ -65,7 +80,7 @@ def reverse_geocode(lat, lon):
     resp = requests.get(
         "https://nominatim.openstreetmap.org/reverse",
         params={"lat": lat, "lon": lon, "format": "jsonv2", "zoom": 14},
-        headers={"User-Agent": private.nominatim_user_agent},
+        headers={"User-Agent": NOMINATIM_USER_AGENT},
         timeout=30,
     )
     resp.raise_for_status()
@@ -82,13 +97,13 @@ def reverse_geocode(lat, lon):
 
 def pick_record():
     """Picks a random stale POI that hasn't been posted yet, or None"""
-    posted = load_posted(private.posted_file)
+    posted = load_posted(POSTED_FILE)
     cutoff = (date.today() - timedelta(days=STALE_DAYS)).isoformat()
 
     # timestamps are RFC3339 strings (e.g. 2018-03-01T12:00:00Z); ISO-8601
     # ordering matches chronological ordering, so a string compare is correct
     # and lets pyarrow push the filter down into the parquet scan.
-    dataset = ds.dataset(private.data_dir, format="parquet")
+    dataset = ds.dataset(DATA_PATH, format="parquet")
     table = dataset.to_table(
         columns=["osm_type", "osm_id", "name", "timestamp", "geometry"],
         filter=pc.field("timestamp") < cutoff,
@@ -97,20 +112,25 @@ def pick_record():
     candidates = [
         row
         for row in table.to_pylist()
-        if f"{row['osm_type']}{row['osm_id']}" not in posted
+        if f"{row['osm_type']}/{row['osm_id']}" not in posted
     ]
     return random.choice(candidates) if candidates else None
 
 
 def main():
+    require_setting(NOMINATIM_USER_AGENT, "NOMINATIM_USER_AGENT")
+    if not DRY_RUN:
+        require_setting(MASTO_BASE_URL, "MASTO_BASE_URL")
+        require_setting(MASTO_ACCESS_TOKEN, "MASTO_ACCESS_TOKEN")
     record = pick_record()
     if record is None:
         print("No stale, unposted POIs left to toot about.")
         return
 
-    key = f"{record['osm_type']}{record['osm_id']}"
-    point = wkb.loads(record["geometry"])
-    state, place = reverse_geocode(point.y, point.x)
+    key = f"{record['osm_type']}/{record['osm_id']}"
+    point = from_wkb(record["geometry"])
+    lat, lon = point.y, point.x
+    state, place = reverse_geocode(lat, lon)
     days = (date.today() - date.fromisoformat(record["timestamp"][:10])).days
 
     msg = compose_message(
@@ -122,13 +142,16 @@ def main():
 
     print(msg)
 
+    if DRY_RUN:
+        return
+
     client = Mastodon(
-        api_base_url=private.masto_base_url,
-        access_token=private.masto_access_token,
+        api_base_url=MASTO_BASE_URL,
+        access_token=MASTO_ACCESS_TOKEN,
     )
     client.toot(msg)
 
-    mark_posted(private.posted_file, key)
+    mark_posted(POSTED_FILE, key)
 
 
 if __name__ == "__main__":

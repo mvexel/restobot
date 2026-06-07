@@ -1,0 +1,30 @@
+services:
+  restobot:
+    build: .
+    image: restobot:latest
+    environment:
+      DATA_PATH: /data/pois.parquet
+      POSTED_FILE: /data/posted.txt
+      NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT:-}
+      MASTO_BASE_URL: ${MASTO_BASE_URL:-}
+      MASTO_ACCESS_TOKEN: ${MASTO_ACCESS_TOKEN:-}
+      DRY_RUN: ${DRY_RUN:-}
+    volumes:
+      - restobot-data:/data
+    restart: "no"
+
+  seed:
+    build: .
+    image: restobot:latest
+    profiles: ["seed"]
+    command: ["sh", "/app/seed_osm.sh"]
+    environment:
+      DATA_PATH: /data/pois.parquet
+      OSM_PBF_PATH: /data/input.osm.pbf
+      OSM_PBF_URL: ${OSM_PBF_URL:-https://download.geofabrik.de/north-america/us-latest.osm.pbf}
+      FORCE_SEED: ${FORCE_SEED:-0}
+    volumes:
+      - restobot-data:/data
+
+volumes:
+  restobot-data:
