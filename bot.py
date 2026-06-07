@@ -38,7 +38,7 @@ def compose_message(days, name, place, osm_link):
     location = f" {place}" if place else ""
     return f"""Resto-bot 🤖 here! It's been {days} days since {name or "an unnamed restaurant"}{location} has been updated on OSM.
 
-If you could do some research and check if this restaurant still exists, that would make RestoBot very happy! Here's the OSM link: {osm_link}. 💡 Help is here: https://git.sr.ht/~mvexel/restobot/tree/main/item/INSTRUCTIONS.md
+If you could do some research and check if this restaurant still exists, that would make RestoBot very happy! Here's the OSM link: {osm_link}. 💡 Help is here: https://codeberg.org/mvexel/restobot/src/branch/main/INSTRUCTIONS.md
 
 #OpenStreetMap loves you back! ❤️🙏
 """
