@@ -4,7 +4,8 @@ FROM rust:1.88-bookworm AS cosmo-builder
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git pkg-config cmake clang sqlite3 libsqlite3-dev libssl-dev libproj-dev \
     && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch 0.2.0 https://codeberg.org/mvexel/cosmo.git /src/cosmo
+RUN git clone https://github.com/mvexel/cosmo.git /src/cosmo \
+    && git -C /src/cosmo checkout 4e290b6ac8d227270d01bf2e17d3a958a5a06b41  # cosmo 0.2.0
 WORKDIR /src/cosmo
 RUN cargo install --path . --locked --root /opt/cosmo
 
